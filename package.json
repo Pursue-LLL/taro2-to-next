@@ -1,0 +1,26 @@
+{
+  "name": "taro2-to-next",
+  "version": "1.0.0",
+  "description": "taro2升级转换taro3",
+  "keywords": [
+    "taro2",
+    "taro3"
+  ],
+  "bin": {
+    "taro2-to-next": "./bin/cli"
+  },
+  "author": "Pursue-LLL",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Pursue-LLL/taro2-to-next.git"
+  },
+  "homepage": "https://www.npmjs.com/package/taro2-to-next",
+  "files": [
+    "bin"
+  ],
+  "devDependencies": {
+    "commander": "^10.0.1",
+    "fs-extra": "^11.1.1"
+  }
+}

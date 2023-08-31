@@ -1,0 +1,121 @@
+#!/usr/bin/env node
+
+const fs = require('fs-extra');
+const path = require('path');
+const { program } = require('commander');
+
+// 定义命令行参数
+program
+  .option('-p, --project-path <type>', '要转换的项目路径')
+  .parse(process.argv);
+
+// 获取命令行参数
+const options = program.opts();
+
+// 如果没有提供项目路径，就退出程序
+if (!options.projectPath) {
+  console.log('Please provide a project path using the -p option.');
+  process.exit(1);
+}
+
+// 获取项目路径，支持传入绝对路径和相对路径
+const projectPath = path.resolve(process.cwd(), options.projectPath);
+// 定义新的路径
+const newPath = `${projectPath}-modified`;
+
+// 如果输出目录已存在，先删除掉
+if (fs.existsSync(newPath)) {
+  fs.removeSync(newPath);
+}
+
+// 更新文件内容的函数
+function updateFile(filePath, newRoot) {
+  // 读取文件内容
+  let content = fs.readFileSync(filePath, 'utf8');
+
+  // 如果文件是.jsx或.tsx文件
+  if (['.jsx', '.tsx'].includes(path.extname(filePath))) {
+    // 查找所有的import语句
+    const matches = content.match(/import\s+([^\n]+)\s+from\s*('@tarojs\/taro'|"@tarojs\/taro")/g);
+
+    if (matches) {
+      // 定义React API列表
+      const reactApis = ['Component', 'useState', 'useEffect', 'useContext', 'useReducer', 'useCallback', 'useMemo', 'useRef', 'useImperativeHandle', 'useLayoutEffect', 'useDebugValue', 'useDeferredValue', 'useTransition'];
+
+      let reactImports = [];
+      let taroImports = [];
+
+      // 遍历所有的import语句
+      matches.forEach(match => {
+        let [fullMatch, importList] = match.match(/import\s+([^\n]+)\s+from\s*('@tarojs\/taro'|"@tarojs\/taro")/);
+        // 去除花括号
+        importList = importList.replace(/[{}]/g, '');
+        let imports = importList.split(',').map(s => s.trim());
+
+        // 遍历所有的导入项
+        imports.forEach(imp => {
+          // 如果是React API，添加到reactImports数组中
+          if (reactApis.includes(imp)) {
+            imp !== 'React' && reactImports.push(imp);
+          } else {
+            // 否则，添加到taroImports数组中
+            imp !== 'Taro' && taroImports.push(imp);
+          }
+        });
+
+        // 创建新的import语句
+        const newTaroImport = `import Taro, { ${taroImports.join(', ')} } from '@tarojs/taro'`;
+        const newReactImport = reactImports.length > 0 ? `\nimport React, { ${reactImports.join(', ')} } from 'react'` : '';
+        // 替换原来的import语句
+        content = content.replace(fullMatch, `${newTaroImport}${newReactImport}`);
+      });
+    }
+
+    // 替换this.$router为getCurrentInstance().router
+    content = content.replace(/this.\$router/g, 'getCurrentInstance().router');
+
+    // 查找config定义语句
+    const configMatch = content.match(/(\w+)\.config\s+=\s+({[^}]*});*/);
+    if (configMatch) {
+      // 创建新的config文件内容
+      const configContent = `export default definePageConfig(${configMatch[2]});`;
+      // 创建新的config文件路径
+      const newConfigFilePath = filePath.replace(projectPath, newRoot).replace('.jsx', '.config.js').replace('.tsx', '.config.ts');
+      // 确保文件存在，然后写入内容
+      fs.ensureFileSync(newConfigFilePath);
+      fs.writeFileSync(newConfigFilePath, configContent, 'utf8');
+
+      // 删除原来的config定义语句，并删除多余的空行
+      content = content.replace(configMatch[0], '');
+      content = content.replace(/\n{2,}/g, '\n\n');
+    }
+  }
+
+  // 创建新的文件路径，并确保文件存在，然后写入内容
+  const newFilePath = filePath.replace(projectPath, newRoot);
+  fs.ensureFileSync(newFilePath);
+  fs.writeFileSync(newFilePath, content, 'utf8');
+}
+
+// 更新目录的函数
+function updateDirectory(dirPath, newRoot) {
+  // 读取目录下的所有文件和子目录
+  const files = fs.readdirSync(dirPath);
+
+  // 遍历所有的文件和子目录
+  for (const file of files) {
+    const filePath = path.join(dirPath, file);
+    const stats = fs.statSync(filePath);
+
+    // 如果是子目录，递归调用updateDirectory函数
+    if (stats.isDirectory()) {
+      updateDirectory(filePath, newRoot);
+    } else if (stats.isFile()) {
+      // 如果是文件，调用updateFile函数
+      updateFile(filePath, newRoot);
+    }
+  }
+}
+
+// 调用updateDirectory函数开始处理
+updateDirectory(projectPath, newPath);
